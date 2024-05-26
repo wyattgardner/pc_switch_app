@@ -112,7 +112,7 @@ class MainActivity : AppCompatActivity()
         btn_profile1.setOnClickListener {
             saveData()
             active_profile = 1
-            btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#673AB7"))
+            btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#81D4FA"))
             btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
             btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
             loadData()
@@ -122,7 +122,7 @@ class MainActivity : AppCompatActivity()
             saveData()
             active_profile = 2
             btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#673AB7"))
+            btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#81D4FA"))
             btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
             loadData()
         }
@@ -132,7 +132,7 @@ class MainActivity : AppCompatActivity()
             active_profile = 3
             btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
             btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#673AB7"))
+            btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#81D4FA"))
             loadData()
         }
 
