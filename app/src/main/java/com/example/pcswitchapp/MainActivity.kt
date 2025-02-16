@@ -13,6 +13,7 @@ import android.Manifest
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.widget.EditText
+import android.widget.ToggleButton
 import java.net.InetSocketAddress
 
 private const val INTERNET_PERMISSION_CODE = 1001
@@ -65,14 +66,15 @@ class MainActivity : AppCompatActivity()
         setContentView(R.layout.activity_main)
 
         val sharedPreferences = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
-        val btn_on_LAN = findViewById<Button>(R.id.btn_on_LAN)
-        val ip_input_LAN = findViewById<EditText>(R.id.textLANIP)
-        val btn_on_WAN = findViewById<Button>(R.id.btn_on_WAN)
-        val ip_input_WAN = findViewById<EditText>(R.id.textWANIP)
+        val btn_on = findViewById<Button>(R.id.btn_on)
+        val ip_input = findViewById<EditText>(R.id.textIP)
+        val btn_fs = findViewById<Button>(R.id.btn_fs)
         val btn_profile1 = findViewById<Button>(R.id.btn_profile1)
         val btn_profile2 = findViewById<Button>(R.id.btn_profile2)
         val btn_profile3 = findViewById<Button>(R.id.btn_profile3)
         val port_input = findViewById<EditText>(R.id.textPort)
+        // LAN = off, WAN = on
+        val toggle_lan_wan = findViewById<ToggleButton>(R.id.toggle_lan_wan)
         var ip_address: String
         var port: Int
 
@@ -81,8 +83,8 @@ class MainActivity : AppCompatActivity()
 
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.INTERNET), INTERNET_PERMISSION_CODE)
 
-        btn_on_LAN.setOnClickListener {
-            ip_address = ip_input_LAN.text.toString()
+        btn_on.setOnClickListener {
+            ip_address = ip_input.text.toString()
             port = if (port_input.text.toString().trim().isEmpty())
             {
                 7776
@@ -95,8 +97,8 @@ class MainActivity : AppCompatActivity()
             sendPackage(ip_address, port,"on")
         }
 
-        btn_on_WAN.setOnClickListener {
-            ip_address = ip_input_WAN.text.toString()
+        btn_fs.setOnClickListener {
+            ip_address = ip_input.text.toString()
             port = if (port_input.text.toString().trim().isEmpty())
             {
                 7776
@@ -105,8 +107,8 @@ class MainActivity : AppCompatActivity()
             {
                 port_input.text.toString().toInt()
             }
-            Toast.makeText(this@MainActivity, "Turning on", Toast.LENGTH_SHORT).show()
-            sendPackage(ip_address, port,"on")
+            Toast.makeText(this@MainActivity, "Shutting down", Toast.LENGTH_SHORT).show()
+            sendPackage(ip_address, port,"fs")
         }
 
         btn_profile1.setOnClickListener {
@@ -136,6 +138,14 @@ class MainActivity : AppCompatActivity()
             loadData()
         }
 
+        toggle_lan_wan.setOnCheckedChangeListener { _, isChecked ->
+            // LAN if it's changing from LAN to WAN
+            // WAN if it's changing from WAN to LAN
+            val network_mode_change = if (isChecked) "LAN" else "WAN"
+            saveData(network_mode_change)
+            loadData()
+        }
+
         when(active_profile)
         {
             1 -> btn_profile1.performClick()
@@ -151,30 +161,53 @@ class MainActivity : AppCompatActivity()
         saveData()
     }
 
-    private fun saveData()
+    private fun saveData(network_mode_change : String = "none")
     {
-        val ip_input_LAN = findViewById<EditText>(R.id.textLANIP)
-        val ip_input_WAN = findViewById<EditText>(R.id.textWANIP)
-        val port_input = findViewById<EditText>(R.id.textPort)
+        val ip_input = findViewById<EditText>(R.id.textIP).text.toString()
+        val port_input = findViewById<EditText>(R.id.textPort).text.toString()
+        // false = LAN, true = WAN
+        val network_mode = findViewById<ToggleButton>(R.id.toggle_lan_wan).isChecked
 
         val sharedPreferences = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
         val editor = sharedPreferences.edit()
+
         editor.putInt("Active_Profile", active_profile)
-        editor.putString("Saved_LAN_IP_$active_profile", ip_input_LAN.text.toString())
-        editor.putString("Saved_WAN_IP_$active_profile", ip_input_WAN.text.toString())
-        editor.putString("Saved_Port_$active_profile", port_input.text.toString())
+        editor.putString("Saved_Port_$active_profile", port_input)
+        editor.putBoolean("Saved_Network_Mode_$active_profile", network_mode)
+        if (network_mode_change == "LAN")
+        {
+            editor.putString("Saved_LAN_IP_$active_profile", ip_input)
+        }
+        else if (network_mode_change == "WAN" || network_mode)
+        {
+            editor.putString("Saved_WAN_IP_$active_profile", ip_input)
+        }
+        else
+        {
+            editor.putString("Saved_LAN_IP_$active_profile", ip_input)
+        }
         editor.apply()
     }
 
     private fun loadData()
     {
-        val ip_input_LAN = findViewById<EditText>(R.id.textLANIP)
-        val ip_input_WAN = findViewById<EditText>(R.id.textWANIP)
+        val ip_input = findViewById<EditText>(R.id.textIP)
         val port_input = findViewById<EditText>(R.id.textPort)
+        val toggle_lan_wan = findViewById<ToggleButton>(R.id.toggle_lan_wan)
 
         val sharedPreferences = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
-        ip_input_LAN.setText(sharedPreferences.getString("Saved_LAN_IP_$active_profile", ""))
-        ip_input_WAN.setText(sharedPreferences.getString("Saved_WAN_IP_$active_profile", ""))
+        // false = LAN, true = WAN
+        val network_mode = sharedPreferences.getBoolean("Saved_Network_Mode_$active_profile", false)
+
+        if (network_mode)
+        {
+            ip_input.setText(sharedPreferences.getString("Saved_WAN_IP_$active_profile", ""))
+        }
+        else
+        {
+            ip_input.setText(sharedPreferences.getString("Saved_LAN_IP_$active_profile", ""))
+        }
         port_input.setText(sharedPreferences.getString("Saved_Port_$active_profile", ""))
+        toggle_lan_wan.isChecked = network_mode
     }
 }
