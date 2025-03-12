@@ -138,10 +138,10 @@ class MainActivity : AppCompatActivity()
             loadData()
         }
 
-        toggle_lan_wan.setOnCheckedChangeListener { _, isChecked ->
+        toggle_lan_wan.setOnClickListener {
             // LAN if it's changing from LAN to WAN
             // WAN if it's changing from WAN to LAN
-            val network_mode_change = if (isChecked) "LAN" else "WAN"
+            val network_mode_change = if (toggle_lan_wan.isChecked) "LAN" else "WAN"
             saveData(network_mode_change)
             loadData()
         }
