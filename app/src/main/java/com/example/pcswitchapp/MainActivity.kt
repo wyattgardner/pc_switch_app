@@ -84,8 +84,8 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
         }
         catch (e: java.net.SocketException)
         {
-            println("Connection reset (buffer full?): ${e.message}")
-            onResult(false, "full")
+            println("Connection reset: ${e.message}")
+            onResult(false, "reset")
         }
         catch (e: Exception)
         {
@@ -177,6 +177,7 @@ class MainActivity : AppCompatActivity()
                     reason == "refused" -> "Connection refused"
                     reason == "timeout" -> "Timed out"
                     reason == "busy" -> "Command queued..."
+                    reason == "full" -> "Busy, command dropped"
                     else -> "Error sending command"
                 })
             }
