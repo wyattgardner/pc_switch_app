@@ -2,6 +2,9 @@ package com.example.pcswitchapp
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.widget.Button
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
@@ -27,6 +30,11 @@ import kotlin.math.max
 
 private const val INTERNET_PERMISSION_CODE = 1001
 private const val MAX_PROFILES = 99
+// How long Toast.LENGTH_SHORT stays up, which the framework exposes no constant for
+private const val SHORT_TOAST_MILLIS = 2000L
+// The toast window stays attached while it animates out. Adding the next one before that
+// finishes throws BadTokenException inside ToastPresenter and the message is lost.
+private const val TOAST_GAP_MILLIS = 2000L
 
 fun createJsonPacket(message : String ) : String
 {
@@ -104,12 +112,33 @@ class MainActivity : AppCompatActivity()
     private var active_profile = 1
     private var profile_ids = mutableListOf<Int>()
     private var current_toast: Toast? = null
+    private val toast_handler = Handler(Looper.getMainLooper())
+    private var toast_clear_at = 0L
 
     private fun showToast(message: String)
     {
+        // A newer message supersedes anything still waiting its turn
+        toast_handler.removeCallbacksAndMessages(null)
         current_toast?.cancel()
         current_toast = Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT)
         current_toast?.show()
+        toast_clear_at = SystemClock.uptimeMillis() + SHORT_TOAST_MILLIS
+    }
+
+    // Waits out the toast already on screen rather than replacing it, so a fast result does not
+    // cut off "Sending command..." and get dropped along with it
+    private fun queueToast(message: String)
+    {
+        val wait = (toast_clear_at + TOAST_GAP_MILLIS) - SystemClock.uptimeMillis()
+
+        if (wait <= 0)
+        {
+            showToast(message)
+        }
+        else
+        {
+            toast_handler.postDelayed({ showToast(message) }, wait)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?)
@@ -172,7 +201,7 @@ class MainActivity : AppCompatActivity()
         showToast("Sending command...")
         sendPackage(ip_address, port, gpio) { acked, reason ->
             runOnUiThread {
-                showToast(when {
+                queueToast(when {
                     acked -> success_message
                     reason == "refused" -> "Connection refused"
                     reason == "timeout" -> "Timed out"
