@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="content_padding">16dp</dimen>
+    <dimen name="content_spacing">12dp</dimen>
+    <dimen name="label_text">22sp</dimen>
+    <dimen name="field_text">18sp</dimen>
+    <dimen name="action_height">60dp</dimen>
+    <dimen name="action_text">22sp</dimen>
+    <dimen name="toggle_height">44dp</dimen>
+    <dimen name="profile_name_text">16sp</dimen>
+    <dimen name="profile_tile_size">60dp</dimen>
+    <dimen name="profile_tile_margin">5dp</dimen>
+    <dimen name="profile_tile_text">28sp</dimen>
+</resources>

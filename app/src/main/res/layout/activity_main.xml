@@ -1,133 +1,102 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fillViewport="true"
     tools:context=".MainActivity">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="100dp">
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/content_padding">
 
-        <TextView
-            android:id="@+id/textView"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:text="IP:"
-            android:textSize="34sp"
-            app:layout_constraintStart_toStartOf="@+id/textIP"
-            app:layout_constraintTop_toTopOf="parent" />
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="IP:"
+                android:textSize="@dimen/label_text" />
+
+            <ToggleButton
+                android:id="@+id/toggle_lan_wan"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/toggle_height"
+                android:backgroundTint="@color/accent"
+                android:checked="false"
+                android:textColor="@color/black"
+                android:textOff="@string/switch_off"
+                android:textOn="@string/switch_on" />
+
+        </LinearLayout>
 
         <EditText
             android:id="@+id/textIP"
-            android:layout_width="300dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:ems="10"
             android:hint="Enter..."
+            android:importantForAutofill="no"
             android:inputType="text"
-            android:textSize="24sp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/textView" />
-
-        <Button
-            android:id="@+id/btn_on"
-            android:layout_width="300dp"
-            android:layout_height="80dp"
-            android:layout_marginTop="40dp"
-            android:backgroundTint="#81D4FA"
-            android:textColor="@color/black"
-            android:text="Turn on PC"
-            android:textSize="34sp"
-            app:layout_constraintStart_toStartOf="@+id/textPort"
-            app:layout_constraintTop_toBottomOf="@+id/textPort" />
+            android:textSize="@dimen/field_text" />
 
         <TextView
-            android:id="@+id/textView2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
+            android:layout_marginTop="@dimen/content_spacing"
             android:text="Port: (default 7776)"
-            android:textSize="34sp"
-            app:layout_constraintStart_toStartOf="@+id/textIP"
-            app:layout_constraintTop_toBottomOf="@+id/textIP" />
+            android:textSize="@dimen/label_text" />
 
         <EditText
             android:id="@+id/textPort"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:ems="10"
             android:hint="7776"
-            android:inputType="text"
-            android:textSize="24sp"
-            app:layout_constraintStart_toStartOf="@+id/textView2"
-            app:layout_constraintTop_toBottomOf="@+id/textView2" />
+            android:importantForAutofill="no"
+            android:inputType="number"
+            android:textSize="@dimen/field_text" />
+
+        <Button
+            android:id="@+id/btn_on"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/action_height"
+            android:layout_marginTop="@dimen/content_spacing"
+            android:backgroundTint="@color/accent"
+            android:text="Turn on PC"
+            android:textColor="@color/black"
+            android:textSize="@dimen/action_text" />
 
         <Button
             android:id="@+id/btn_fs"
-            android:layout_width="300dp"
-            android:layout_height="80dp"
-            android:layout_marginTop="40dp"
-            android:backgroundTint="#81D4FA"
-            android:textColor="@color/black"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/action_height"
+            android:layout_marginTop="@dimen/content_spacing"
+            android:backgroundTint="@color/accent"
             android:text="Force shutdown"
-            android:textSize="34sp"
-            app:layout_constraintStart_toStartOf="@+id/btn_on"
-            app:layout_constraintTop_toBottomOf="@+id/btn_on" />
-
-        <Button
-            android:id="@+id/btn_profile1"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:layout_marginTop="40dp"
-            android:backgroundTint="#81D4FA"
             android:textColor="@color/black"
-            android:text="1"
-            android:textSize="48sp"
-            app:layout_constraintStart_toStartOf="@+id/btn_fs"
-            app:layout_constraintTop_toBottomOf="@+id/btn_fs" />
+            android:textSize="@dimen/action_text" />
 
-        <Button
-            android:id="@+id/btn_profile2"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:layout_marginTop="40dp"
-            android:backgroundTint="#81D4FA"
-            android:textColor="@color/black"
-            android:text="2"
-            android:textSize="48sp"
-            app:layout_constraintEnd_toStartOf="@+id/btn_profile3"
-            app:layout_constraintStart_toEndOf="@+id/btn_profile1"
-            app:layout_constraintTop_toBottomOf="@+id/btn_fs" />
+        <TextView
+            android:id="@+id/text_profile_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/content_spacing"
+            android:gravity="center_horizontal"
+            android:textSize="@dimen/profile_name_text"
+            tools:text="Profile 1" />
 
-        <Button
-            android:id="@+id/btn_profile3"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:layout_marginTop="40dp"
-            android:backgroundTint="#81D4FA"
-            android:textColor="@color/black"
-            android:text="3"
-            android:textSize="48sp"
-            app:layout_constraintEnd_toEndOf="@+id/btn_fs"
-            app:layout_constraintTop_toBottomOf="@+id/btn_fs" />
-
-        <ToggleButton
-            android:id="@+id/toggle_lan_wan"
+        <GridLayout
+            android:id="@+id/profile_grid"
             android:layout_width="wrap_content"
-            android:layout_height="55dp"
-            android:layout_marginBottom="32dp"
-            android:backgroundTint="#81D4FA"
-            android:textColor="@color/black"
-            android:checked="false"
-            android:textOff="@string/switch_off"
-            android:textOn="@string/switch_on"
-            app:layout_constraintBottom_toTopOf="@+id/textIP"
-            app:layout_constraintEnd_toEndOf="@+id/textIP" />
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal" />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
 </ScrollView>

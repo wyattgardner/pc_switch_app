@@ -14,9 +14,16 @@ import java.net.Socket
 import android.Manifest
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.util.TypedValue
+import android.view.View
 import android.widget.EditText
+import android.widget.GridLayout
+import android.widget.TextView
 import android.widget.ToggleButton
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import java.net.InetSocketAddress
+import kotlin.math.max
 
 private const val INTERNET_PERMISSION_CODE = 1001
 
@@ -94,6 +101,7 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
 class MainActivity : AppCompatActivity()
 {
     private var active_profile = 1
+    private var profile_ids = mutableListOf<Int>()
     private var current_toast: Toast? = null
 
     private fun showToast(message: String)
@@ -108,97 +116,27 @@ class MainActivity : AppCompatActivity()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val sharedPreferences = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
         val btn_on = findViewById<Button>(R.id.btn_on)
-        val ip_input = findViewById<EditText>(R.id.textIP)
         val btn_fs = findViewById<Button>(R.id.btn_fs)
-        val btn_profile1 = findViewById<Button>(R.id.btn_profile1)
-        val btn_profile2 = findViewById<Button>(R.id.btn_profile2)
-        val btn_profile3 = findViewById<Button>(R.id.btn_profile3)
-        val port_input = findViewById<EditText>(R.id.textPort)
-        // LAN = off, WAN = on
         val toggle_lan_wan = findViewById<ToggleButton>(R.id.toggle_lan_wan)
-        var ip_address: String
-        var port: Int
+        val profile_grid = findViewById<GridLayout>(R.id.profile_grid)
 
-        active_profile = sharedPreferences.getInt("Active_Profile", 1)
+        loadProfileList()
+        active_profile = prefs().getInt("Active_Profile", profile_ids.first())
+        if (!profile_ids.contains(active_profile))
+        {
+            active_profile = profile_ids.first()
+        }
         loadData()
 
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.INTERNET), INTERNET_PERMISSION_CODE)
 
         btn_on.setOnClickListener {
-            ip_address = ip_input.text.toString()
-            port = if (port_input.text.toString().trim().isEmpty())
-            {
-                7776
-            }
-            else
-            {
-                port_input.text.toString().toInt()
-            }
-            showToast("Sending command...")
-            sendPackage(ip_address, port, "on") { acked, reason ->
-                runOnUiThread {
-                    showToast(when {
-                        acked -> "Turning on"
-                        reason == "refused" -> "Connection refused"
-                        reason == "timeout" -> "Timed out"
-                        reason == "busy" -> "Command queued..."
-                        else -> "Error sending command"
-                    })
-                }
-            }
+            sendCommand("on", "Turning on")
         }
 
         btn_fs.setOnClickListener {
-            ip_address = ip_input.text.toString()
-            port = if (port_input.text.toString().trim().isEmpty())
-            {
-                7776
-            }
-            else
-            {
-                port_input.text.toString().toInt()
-            }
-            showToast("Sending command...")
-            sendPackage(ip_address, port, "fs") { acked, reason ->
-                runOnUiThread {
-                    showToast(when {
-                        acked -> "Shutting down"
-                        reason == "refused" -> "Connection refused"
-                        reason == "timeout" -> "Timed out"
-                        reason == "busy" -> "Command queued..."
-                        else -> "Error sending command"
-                    })
-                }
-            }
-        }
-
-        btn_profile1.setOnClickListener {
-            saveData()
-            active_profile = 1
-            btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#81D4FA"))
-            btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            loadData()
-        }
-
-        btn_profile2.setOnClickListener {
-            saveData()
-            active_profile = 2
-            btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#81D4FA"))
-            btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            loadData()
-        }
-
-        btn_profile3.setOnClickListener {
-            saveData()
-            active_profile = 3
-            btn_profile1.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            btn_profile2.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#808080"))
-            btn_profile3.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#81D4FA"))
-            loadData()
+            sendCommand("fs", "Shutting down")
         }
 
         toggle_lan_wan.setOnClickListener {
@@ -209,11 +147,9 @@ class MainActivity : AppCompatActivity()
             loadData()
         }
 
-        when(active_profile)
-        {
-            1 -> btn_profile1.performClick()
-            2 -> btn_profile2.performClick()
-            3 -> btn_profile3.performClick()
+        // Column count depends on the width the grid is given, so wait for layout
+        profile_grid.post {
+            buildProfileTiles()
         }
     }
 
@@ -224,6 +160,217 @@ class MainActivity : AppCompatActivity()
         saveData()
     }
 
+    private fun prefs() = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
+
+    private fun sendCommand(gpio : String, success_message : String)
+    {
+        val ip_address = findViewById<EditText>(R.id.textIP).text.toString()
+        val port_text = findViewById<EditText>(R.id.textPort).text.toString().trim()
+        val port = if (port_text.isEmpty()) 7776 else port_text.toIntOrNull() ?: 7776
+
+        showToast("Sending command...")
+        sendPackage(ip_address, port, gpio) { acked, reason ->
+            runOnUiThread {
+                showToast(when {
+                    acked -> success_message
+                    reason == "refused" -> "Connection refused"
+                    reason == "timeout" -> "Timed out"
+                    reason == "busy" -> "Command queued..."
+                    else -> "Error sending command"
+                })
+            }
+        }
+    }
+
+    private fun loadProfileList()
+    {
+        val saved = prefs().getString("Profile_Ids", null)
+        profile_ids = saved?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.toMutableList() ?: mutableListOf()
+
+        // Carries over the three profiles from before profiles were a list
+        if (profile_ids.isEmpty())
+        {
+            profile_ids = mutableListOf(1, 2, 3)
+            saveProfileList()
+        }
+    }
+
+    private fun saveProfileList()
+    {
+        prefs().edit().putString("Profile_Ids", profile_ids.joinToString(",")).apply()
+    }
+
+    private fun defaultProfileName(id : Int) = "Profile " + (profile_ids.indexOf(id) + 1)
+
+    private fun profileName(id : Int) : String
+    {
+        val saved = prefs().getString("Profile_Name_$id", null)
+        return if (saved.isNullOrBlank()) defaultProfileName(id) else saved
+    }
+
+    private fun buildProfileTiles()
+    {
+        val grid = findViewById<GridLayout>(R.id.profile_grid)
+        val tile_size = resources.getDimensionPixelSize(R.dimen.profile_tile_size)
+        val tile_margin = resources.getDimensionPixelSize(R.dimen.profile_tile_margin)
+
+        val parent = grid.parent as View
+        var available = parent.width - parent.paddingLeft - parent.paddingRight
+        if (available <= 0)
+        {
+            available = resources.displayMetrics.widthPixels
+        }
+
+        grid.removeAllViews()
+        grid.columnCount = max(1, available / (tile_size + tile_margin * 2))
+
+        for ((index, id) in profile_ids.withIndex())
+        {
+            val tile = makeTile((index + 1).toString(), id == active_profile)
+            tile.setOnClickListener {
+                switchProfile(id)
+            }
+            tile.setOnLongClickListener {
+                showProfileOptions(id)
+                true
+            }
+            grid.addView(tile)
+        }
+
+        val add_tile = makeTile("+", false)
+        add_tile.setOnClickListener {
+            addProfile()
+        }
+        grid.addView(add_tile)
+
+        updateProfileName()
+    }
+
+    private fun makeTile(label : String, active : Boolean) : Button
+    {
+        val tile_size = resources.getDimensionPixelSize(R.dimen.profile_tile_size)
+        val tile_margin = resources.getDimensionPixelSize(R.dimen.profile_tile_margin)
+
+        return Button(this).apply {
+            layoutParams = GridLayout.LayoutParams().apply {
+                width = tile_size
+                height = tile_size
+                setMargins(tile_margin, tile_margin, tile_margin, tile_margin)
+            }
+            text = label
+            setTextColor(Color.BLACK)
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.profile_tile_text))
+            minWidth = 0
+            minHeight = 0
+            setPadding(0, 0, 0, 0)
+            backgroundTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(context, if (active) R.color.accent else R.color.profile_inactive))
+        }
+    }
+
+    private fun updateProfileName()
+    {
+        findViewById<TextView>(R.id.text_profile_name).text = profileName(active_profile)
+    }
+
+    private fun switchProfile(id : Int)
+    {
+        saveData()
+        active_profile = id
+        prefs().edit().putInt("Active_Profile", id).apply()
+        loadData()
+        buildProfileTiles()
+    }
+
+    private fun addProfile()
+    {
+        saveData()
+
+        val new_id = (profile_ids.maxOrNull() ?: 0) + 1
+        profile_ids.add(new_id)
+        saveProfileList()
+
+        active_profile = new_id
+        prefs().edit().putInt("Active_Profile", new_id).apply()
+        loadData()
+        buildProfileTiles()
+    }
+
+    private fun showProfileOptions(id : Int)
+    {
+        AlertDialog.Builder(this)
+            .setTitle(profileName(id))
+            .setItems(arrayOf("Rename", "Delete")) { _, which ->
+                if (which == 0)
+                {
+                    showRenameDialog(id)
+                }
+                else
+                {
+                    confirmDelete(id)
+                }
+            }
+            .show()
+    }
+
+    private fun showRenameDialog(id : Int)
+    {
+        val input = EditText(this).apply {
+            setText(profileName(id))
+            setSelection(text.length)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Rename profile")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                prefs().edit().putString("Profile_Name_$id", input.text.toString().trim()).apply()
+                updateProfileName()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmDelete(id : Int)
+    {
+        if (profile_ids.size <= 1)
+        {
+            showToast("Can't delete the only profile")
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Delete " + profileName(id) + "?")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteProfile(id)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deleteProfile(id : Int)
+    {
+        profile_ids.remove(id)
+        saveProfileList()
+
+        prefs().edit()
+            .remove("Saved_LAN_IP_$id")
+            .remove("Saved_WAN_IP_$id")
+            .remove("Saved_Port_$id")
+            .remove("Saved_Network_Mode_$id")
+            .remove("Profile_Name_$id")
+            .apply()
+
+        if (active_profile == id)
+        {
+            active_profile = profile_ids.first()
+            prefs().edit().putInt("Active_Profile", active_profile).apply()
+            loadData()
+        }
+
+        buildProfileTiles()
+    }
+
     private fun saveData(network_mode_change : String = "none")
     {
         val ip_input = findViewById<EditText>(R.id.textIP).text.toString()
@@ -231,8 +378,7 @@ class MainActivity : AppCompatActivity()
         // false = LAN, true = WAN
         val network_mode = findViewById<ToggleButton>(R.id.toggle_lan_wan).isChecked
 
-        val sharedPreferences = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
-        val editor = sharedPreferences.edit()
+        val editor = prefs().edit()
 
         editor.putInt("Active_Profile", active_profile)
         editor.putString("Saved_Port_$active_profile", port_input)
@@ -258,19 +404,18 @@ class MainActivity : AppCompatActivity()
         val port_input = findViewById<EditText>(R.id.textPort)
         val toggle_lan_wan = findViewById<ToggleButton>(R.id.toggle_lan_wan)
 
-        val sharedPreferences = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
         // false = LAN, true = WAN
-        val network_mode = sharedPreferences.getBoolean("Saved_Network_Mode_$active_profile", false)
+        val network_mode = prefs().getBoolean("Saved_Network_Mode_$active_profile", false)
 
         if (network_mode)
         {
-            ip_input.setText(sharedPreferences.getString("Saved_WAN_IP_$active_profile", ""))
+            ip_input.setText(prefs().getString("Saved_WAN_IP_$active_profile", ""))
         }
         else
         {
-            ip_input.setText(sharedPreferences.getString("Saved_LAN_IP_$active_profile", ""))
+            ip_input.setText(prefs().getString("Saved_LAN_IP_$active_profile", ""))
         }
-        port_input.setText(sharedPreferences.getString("Saved_Port_$active_profile", ""))
+        port_input.setText(prefs().getString("Saved_Port_$active_profile", ""))
         toggle_lan_wan.isChecked = network_mode
     }
 }
