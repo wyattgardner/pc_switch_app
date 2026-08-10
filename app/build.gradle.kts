@@ -24,6 +24,8 @@ android {
         versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["appLabel"] = "PC Switch"
     }
 
     signingConfigs {
@@ -38,6 +40,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            manifestPlaceholders["appLabel"] = "PC Switch (debug)"
         }
         release {
             isMinifyEnabled = false
