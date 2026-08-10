@@ -26,6 +26,7 @@ import java.net.InetSocketAddress
 import kotlin.math.max
 
 private const val INTERNET_PERMISSION_CODE = 1001
+private const val MAX_PROFILES = 99
 
 fun createJsonPacket(message : String ) : String
 {
@@ -237,11 +238,14 @@ class MainActivity : AppCompatActivity()
             grid.addView(tile)
         }
 
-        val add_tile = makeTile("+", false)
-        add_tile.setOnClickListener {
-            addProfile()
+        if (profile_ids.size < MAX_PROFILES)
+        {
+            val add_tile = makeTile("+", false)
+            add_tile.setOnClickListener {
+                addProfile()
+            }
+            grid.addView(add_tile)
         }
-        grid.addView(add_tile)
 
         updateProfileName()
     }
@@ -259,7 +263,14 @@ class MainActivity : AppCompatActivity()
             }
             text = label
             setTextColor(Color.BLACK)
-            setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.profile_tile_text))
+            // Shrinks two digit numbers to fit, enlarges the plus to match a digit optically
+            val text_scale = when
+            {
+                label == "+" -> 1.35f
+                label.length == 1 -> 1.0f
+                else -> 0.75f
+            }
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.profile_tile_text) * text_scale)
             minWidth = 0
             minHeight = 0
             setPadding(0, 0, 0, 0)
@@ -284,6 +295,12 @@ class MainActivity : AppCompatActivity()
 
     private fun addProfile()
     {
+        if (profile_ids.size >= MAX_PROFILES)
+        {
+            showToast("Profile limit is $MAX_PROFILES")
+            return
+        }
+
         saveData()
 
         val new_id = (profile_ids.maxOrNull() ?: 0) + 1
