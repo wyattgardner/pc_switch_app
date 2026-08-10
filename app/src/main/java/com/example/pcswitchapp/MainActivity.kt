@@ -6,7 +6,9 @@ import android.widget.Button
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.BufferedWriter
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.Socket
 import android.Manifest
@@ -25,18 +27,21 @@ fun createJsonPacket(message : String ) : String
     return jsonData.toString()
 }
 
-fun sendPackage(IP_address : String, port : Int, message : String)
+fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Boolean, String?) -> Unit = { _, _ -> })
 {
     Thread {
-        val timeoutMillis = 1000 // Timeout in Millisecond (1 second)
+        val timeoutMillis = 2000 // Timeout in Millisecond (2 seconds)
         val jsonPacket = createJsonPacket(message)
 
         val socket = Socket()
+        var connected = false
 
         try
         {
             val socketAddress = InetSocketAddress(IP_address, port)
             socket.connect(socketAddress, timeoutMillis)
+            connected = true
+            socket.soTimeout = timeoutMillis
 
             val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
             writer.write(jsonPacket)
@@ -44,10 +49,40 @@ fun sendPackage(IP_address : String, port : Int, message : String)
             writer.flush()
 
             println("Sent successfully: $jsonPacket")
+
+            val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+            val response = reader.readLine()
+            val status = response?.let { JSONObject(it).optString("status") }
+
+            onResult(status == "ack", status)
+        }
+        catch (e: java.net.ConnectException)
+        {
+            println("Connection refused: ${e.message}")
+            onResult(false, "refused")
+        }
+        catch (e: java.net.SocketTimeoutException)
+        {
+            if (connected)
+            {
+                println("Connected but no ack (Pico busy?): ${e.message}")
+                onResult(false, "busy")
+            }
+            else
+            {
+                println("Timed out: ${e.message}")
+                onResult(false, "timeout")
+            }
+        }
+        catch (e: java.net.SocketException)
+        {
+            println("Connection reset (buffer full?): ${e.message}")
+            onResult(false, "full")
         }
         catch (e: Exception)
         {
             println("Error during connect or transmission: ${e.message}")
+            onResult(false, "error")
         }
         finally
         {
@@ -59,6 +94,14 @@ fun sendPackage(IP_address : String, port : Int, message : String)
 class MainActivity : AppCompatActivity()
 {
     private var active_profile = 1
+    private var current_toast: Toast? = null
+
+    private fun showToast(message: String)
+    {
+        current_toast?.cancel()
+        current_toast = Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT)
+        current_toast?.show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?)
     {
@@ -93,8 +136,18 @@ class MainActivity : AppCompatActivity()
             {
                 port_input.text.toString().toInt()
             }
-            Toast.makeText(this@MainActivity, "Turning on", Toast.LENGTH_SHORT).show()
-            sendPackage(ip_address, port,"on")
+            showToast("Sending command...")
+            sendPackage(ip_address, port, "on") { acked, reason ->
+                runOnUiThread {
+                    showToast(when {
+                        acked -> "Turning on"
+                        reason == "refused" -> "Connection refused"
+                        reason == "timeout" -> "Timed out"
+                        reason == "busy" -> "Command queued..."
+                        else -> "Error sending command"
+                    })
+                }
+            }
         }
 
         btn_fs.setOnClickListener {
@@ -107,8 +160,18 @@ class MainActivity : AppCompatActivity()
             {
                 port_input.text.toString().toInt()
             }
-            Toast.makeText(this@MainActivity, "Shutting down", Toast.LENGTH_SHORT).show()
-            sendPackage(ip_address, port,"fs")
+            showToast("Sending command...")
+            sendPackage(ip_address, port, "fs") { acked, reason ->
+                runOnUiThread {
+                    showToast(when {
+                        acked -> "Shutting down"
+                        reason == "refused" -> "Connection refused"
+                        reason == "timeout" -> "Timed out"
+                        reason == "busy" -> "Command queued..."
+                        else -> "Error sending command"
+                    })
+                }
+            }
         }
 
         btn_profile1.setOnClickListener {
