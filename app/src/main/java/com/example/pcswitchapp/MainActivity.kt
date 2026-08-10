@@ -238,14 +238,11 @@ class MainActivity : AppCompatActivity()
             grid.addView(tile)
         }
 
-        if (profile_ids.size < MAX_PROFILES)
-        {
-            val add_tile = makeTile("+", false)
-            add_tile.setOnClickListener {
-                addProfile()
-            }
-            grid.addView(add_tile)
+        val add_tile = makeTile("+", false)
+        add_tile.setOnClickListener {
+            addProfile()
         }
+        grid.addView(add_tile)
 
         updateProfileName()
     }
@@ -256,7 +253,11 @@ class MainActivity : AppCompatActivity()
         val tile_margin = resources.getDimensionPixelSize(R.dimen.profile_tile_margin)
 
         return Button(this).apply {
-            layoutParams = GridLayout.LayoutParams().apply {
+            // Center alignment, otherwise GridLayout lines tiles up by text baseline
+            layoutParams = GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, GridLayout.CENTER),
+                GridLayout.spec(GridLayout.UNDEFINED, GridLayout.CENTER)
+            ).apply {
                 width = tile_size
                 height = tile_size
                 setMargins(tile_margin, tile_margin, tile_margin, tile_margin)
@@ -297,7 +298,7 @@ class MainActivity : AppCompatActivity()
     {
         if (profile_ids.size >= MAX_PROFILES)
         {
-            showToast("Profile limit is $MAX_PROFILES")
+            showToast("Do you really need more?")
             return
         }
 
