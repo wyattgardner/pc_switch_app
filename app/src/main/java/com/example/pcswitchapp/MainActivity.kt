@@ -39,7 +39,7 @@ private const val TOAST_GAP_MILLIS = 500L
 fun createJsonPacket(message : String ) : String
 {
     val jsonData = JSONObject()
-    jsonData.put("gpio", message)
+    jsonData.put("request", message)
     return jsonData.toString()
 }
 
@@ -78,7 +78,7 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
             }
             else
             {
-                val status = JSONObject(response).optString("status")
+                val status = JSONObject(response).optString("response")
                 onResult(status == "ack", status)
             }
         }
@@ -170,11 +170,11 @@ class MainActivity : AppCompatActivity()
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.INTERNET), INTERNET_PERMISSION_CODE)
 
         btn_on.setOnClickListener {
-            sendCommand("on", "Turning on")
+            sendCommand("turn_pc_on", "Turning on")
         }
 
         btn_fs.setOnClickListener {
-            sendCommand("fs", "Shutting down")
+            sendCommand("force_shutdown_pc", "Shutting down")
         }
 
         toggle_lan_wan.setOnClickListener {
@@ -200,14 +200,14 @@ class MainActivity : AppCompatActivity()
 
     private fun prefs() = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
 
-    private fun sendCommand(gpio : String, success_message : String)
+    private fun sendCommand(request : String, success_message : String)
     {
         val ip_address = findViewById<EditText>(R.id.textIP).text.toString()
         val port_text = findViewById<EditText>(R.id.textPort).text.toString().trim()
         val port = if (port_text.isEmpty()) 7776 else port_text.toIntOrNull() ?: 7776
 
         showToast("Sending command...")
-        sendPackage(ip_address, port, gpio) { acked, reason ->
+        sendPackage(ip_address, port, request) { acked, reason ->
             runOnUiThread {
                 queueToast(when {
                     reason == "noack" -> "$success_message (no ack)"
