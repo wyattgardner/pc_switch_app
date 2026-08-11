@@ -1,5 +1,5 @@
 # pc_switch_app
-Android app used to interface with the pc_switch Pico W project
+Android app used to interface with the pc_switch project
 
 Credit to [Lutz](https://www.youtube.com/watch?v=znwLqv2otRQ)
 

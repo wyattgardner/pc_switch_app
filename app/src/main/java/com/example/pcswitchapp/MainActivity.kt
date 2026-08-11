@@ -30,11 +30,11 @@ import kotlin.math.max
 
 private const val INTERNET_PERMISSION_CODE = 1001
 private const val MAX_PROFILES = 99
-// How long Toast.LENGTH_SHORT stays up, which the framework exposes no constant for
-private const val SHORT_TOAST_MILLIS = 2000L
-// The toast window stays attached while it animates out. Adding the next one before that
-// finishes throws BadTokenException inside ToastPresenter and the message is lost.
-private const val TOAST_GAP_MILLIS = 2000L
+// How long a toast stays up before a queued one may cut it short
+private const val MIN_TOAST_MILLIS = 500L
+// The toast window stays attached after cancel(). Adding the next one before that finishes
+// throws BadTokenException inside ToastPresenter and the message is lost.
+private const val TOAST_GAP_MILLIS = 500L
 
 fun createJsonPacket(message : String ) : String
 {
@@ -68,9 +68,19 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
 
             val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
             val response = reader.readLine()
-            val status = response?.let { JSONObject(it).optString("status") }
 
-            onResult(status == "ack", status)
+            if (response == null)
+            {
+                // Firmware older than the status reply runs the command and closes without
+                // answering, so a silent close still means the command landed
+                println("No reply, closed cleanly (old firmware?)")
+                onResult(true, "noack")
+            }
+            else
+            {
+                val status = JSONObject(response).optString("status")
+                onResult(status == "ack", status)
+            }
         }
         catch (e: java.net.ConnectException)
         {
@@ -81,8 +91,10 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
         {
             if (connected)
             {
-                println("Connected but no ack (Pico busy?): ${e.message}")
-                onResult(false, "busy")
+                // Old firmware holds the connection open for the whole relay time, which
+                // outlasts this timeout on a force shutdown. Current firmware always answers.
+                println("Connected but no reply (old firmware?): ${e.message}")
+                onResult(true, "noack")
             }
             else
             {
@@ -113,7 +125,7 @@ class MainActivity : AppCompatActivity()
     private var profile_ids = mutableListOf<Int>()
     private var current_toast: Toast? = null
     private val toast_handler = Handler(Looper.getMainLooper())
-    private var toast_clear_at = 0L
+    private var toast_shown_at = 0L
 
     private fun showToast(message: String)
     {
@@ -122,23 +134,19 @@ class MainActivity : AppCompatActivity()
         current_toast?.cancel()
         current_toast = Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT)
         current_toast?.show()
-        toast_clear_at = SystemClock.uptimeMillis() + SHORT_TOAST_MILLIS
+        toast_shown_at = SystemClock.uptimeMillis()
     }
 
-    // Waits out the toast already on screen rather than replacing it, so a fast result does not
-    // cut off "Sending command..." and get dropped along with it
+    // Cuts the toast on screen short instead of replacing it outright, so a fast result does not
+    // steal "Sending command..." before it is readable and get dropped along with it
     private fun queueToast(message: String)
     {
-        val wait = (toast_clear_at + TOAST_GAP_MILLIS) - SystemClock.uptimeMillis()
+        val wait = (toast_shown_at + MIN_TOAST_MILLIS) - SystemClock.uptimeMillis()
 
-        if (wait <= 0)
-        {
-            showToast(message)
-        }
-        else
-        {
-            toast_handler.postDelayed({ showToast(message) }, wait)
-        }
+        toast_handler.postDelayed({
+            current_toast?.cancel()
+            toast_handler.postDelayed({ showToast(message) }, TOAST_GAP_MILLIS)
+        }, max(0L, wait))
     }
 
     override fun onCreate(savedInstanceState: Bundle?)
@@ -202,10 +210,10 @@ class MainActivity : AppCompatActivity()
         sendPackage(ip_address, port, gpio) { acked, reason ->
             runOnUiThread {
                 queueToast(when {
+                    reason == "noack" -> "$success_message (no ack)"
                     acked -> success_message
                     reason == "refused" -> "Connection refused"
                     reason == "timeout" -> "Timed out"
-                    reason == "busy" -> "Command queued..."
                     reason == "full" -> "Busy, command dropped"
                     else -> "Error sending command"
                 })
