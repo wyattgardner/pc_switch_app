@@ -35,13 +35,16 @@ private const val MIN_TOAST_MILLIS = 500L
 // The toast window stays attached after cancel(). Adding the next one before that finishes
 // throws BadTokenException inside ToastPresenter and the message is lost.
 private const val TOAST_GAP_MILLIS = 500L
+// Roughly how long Toast.LENGTH_SHORT stays up. Past this there is nothing on screen to replace,
+// so a result can be shown straight away instead of waiting its turn behind a toast that is gone.
+private const val TOAST_VISIBLE_MILLIS = 2000L
 // A little over the round trip, since the first packet across a tailnet can pay for a handshake
 // before the connection is up. This is also how long a button sits faded when nothing answers.
 private const val CONNECT_TIMEOUT_MILLIS = 3000
 // The board answers before it touches the relay, so this only ever covers the round trip
 private const val READ_TIMEOUT_MILLIS = 2000
-// A queued command only runs once the relay is free, and a force shutdown ahead of it holds the
-// relay for seconds, so the wait for the board's "done" gets a far longer timeout than the ack
+// A queued command only starts once the relay is free, and a force shutdown ahead of it holds the
+// relay for seconds, so waiting for the board's start notice gets a far longer timeout than the ack
 private const val QUEUED_TIMEOUT_MILLIS = 30000
 // How faded an action button goes while its command is in flight
 private const val HALF_TONE_ALPHA = 0.5f
@@ -97,22 +100,23 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
 
                 if (status == "queued")
                 {
-                    // The board holds this connection open until the command ahead has run
+                    // The board holds this connection open until the command ahead of ours has
+                    // released the relay, then tells us ours is starting
                     onResult(true, "queued")
                     awaiting_done = true
 
                     socket.soTimeout = QUEUED_TIMEOUT_MILLIS
-                    val finished = reader.readLine()
+                    val started = reader.readLine()
 
-                    if (finished == null)
+                    if (started == null)
                     {
                         println("Board closed before the queued command ran")
                         onResult(false, "lost")
                     }
                     else
                     {
-                        val done = JSONObject(finished).optString("response")
-                        onResult(done == "done", done)
+                        val running = JSONObject(started).optString("response")
+                        onResult(running == "running", running)
                     }
                 }
                 else
@@ -121,10 +125,22 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
                 }
             }
         }
+        catch (e: java.net.NoRouteToHostException)
+        {
+            println("No route to board: ${e.message}")
+            onResult(false, "timeout")
+        }
         catch (e: java.net.ConnectException)
         {
-            println("Connection refused: ${e.message}")
-            onResult(false, "refused")
+            // Android funnels several connect errnos into ConnectException. Nothing at the address
+            // reads as a timeout to the user, the same as no answer, so only a real refusal (a live
+            // host with nothing listening on that port) gets called refused. The errno is logged
+            // either way, since that is the part worth knowing when something is actually wrong.
+            val unreachable = e.message?.contains("EHOSTUNREACH") == true ||
+                              e.message?.contains("ENETUNREACH") == true
+
+            println("Connect failed: ${e.message}")
+            onResult(false, if (unreachable) "timeout" else "refused")
         }
         catch (e: java.net.SocketTimeoutException)
         {
@@ -202,12 +218,20 @@ class MainActivity : AppCompatActivity()
     // close together do not steal each other off screen before either is readable
     private fun queueToast(message: String)
     {
-        val wait = (toast_shown_at + MIN_TOAST_MILLIS) - SystemClock.uptimeMillis()
+        val since = SystemClock.uptimeMillis() - toast_shown_at
+
+        // With nothing on screen there is nothing to cancel, so none of the waiting below applies.
+        // Paying it anyway put every result half a second behind the board it was reporting on.
+        if (since >= TOAST_VISIBLE_MILLIS)
+        {
+            showToast(message)
+            return
+        }
 
         toast_handler.postDelayed({
             current_toast?.cancel()
             toast_handler.postDelayed({ showToast(message) }, TOAST_GAP_MILLIS)
-        }, max(0L, wait))
+        }, max(0L, MIN_TOAST_MILLIS - since))
     }
 
     override fun onCreate(savedInstanceState: Bundle?)

@@ -20,8 +20,8 @@ android {
         minSdk = 27
         targetSdk = 34
         // MAJOR * 10000 + MINOR * 100 + PATCH
-        versionCode = 10303
-        versionName = "1.3.3"
+        versionCode = 10304
+        versionName = "1.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
