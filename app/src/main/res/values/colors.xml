@@ -3,5 +3,7 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="accent">#81D4FA</color>
+    <!-- Darker accent, worn until the board reports the queued command has run -->
+    <color name="accent_queued">#039BE5</color>
     <color name="profile_inactive">#808080</color>
 </resources>

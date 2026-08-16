@@ -35,6 +35,19 @@ private const val MIN_TOAST_MILLIS = 500L
 // The toast window stays attached after cancel(). Adding the next one before that finishes
 // throws BadTokenException inside ToastPresenter and the message is lost.
 private const val TOAST_GAP_MILLIS = 500L
+// A little over the round trip, since the first packet across a tailnet can pay for a handshake
+// before the connection is up. This is also how long a button sits faded when nothing answers.
+private const val CONNECT_TIMEOUT_MILLIS = 3000
+// The board answers before it touches the relay, so this only ever covers the round trip
+private const val READ_TIMEOUT_MILLIS = 2000
+// A queued command only runs once the relay is free, and a force shutdown ahead of it holds the
+// relay for seconds, so the wait for the board's "done" gets a far longer timeout than the ack
+private const val QUEUED_TIMEOUT_MILLIS = 30000
+// How faded an action button goes while its command is in flight
+private const val HALF_TONE_ALPHA = 0.5f
+
+// What an action button is currently doing, which is also what colour it wears
+private enum class ButtonState { IDLE, PENDING, QUEUED }
 
 fun createJsonPacket(message : String ) : String
 {
@@ -43,21 +56,23 @@ fun createJsonPacket(message : String ) : String
     return jsonData.toString()
 }
 
+// onResult fires once for most commands. A queued one reports twice, "queued" as soon as the
+// board takes it and then a terminal result once the board says it has run.
 fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Boolean, String?) -> Unit = { _, _ -> })
 {
     Thread {
-        val timeoutMillis = 2000 // Timeout in Millisecond (2 seconds)
         val jsonPacket = createJsonPacket(message)
 
         val socket = Socket()
         var connected = false
+        var awaiting_done = false
 
         try
         {
             val socketAddress = InetSocketAddress(IP_address, port)
-            socket.connect(socketAddress, timeoutMillis)
+            socket.connect(socketAddress, CONNECT_TIMEOUT_MILLIS)
             connected = true
-            socket.soTimeout = timeoutMillis
+            socket.soTimeout = READ_TIMEOUT_MILLIS
 
             val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
             writer.write(jsonPacket)
@@ -71,15 +86,39 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
 
             if (response == null)
             {
-                // Firmware older than the status reply runs the command and closes without
-                // answering, so a silent close still means the command landed
-                println("No reply, closed cleanly (old firmware?)")
-                onResult(true, "noack")
+                // The board always answers before it touches the relay, so a silent close means
+                // the request did not land. Reporting it as sent would be a guess dressed as a fact.
+                println("Closed without answering")
+                onResult(false, "noreply")
             }
             else
             {
                 val status = JSONObject(response).optString("response")
-                onResult(status == "ack", status)
+
+                if (status == "queued")
+                {
+                    // The board holds this connection open until the command ahead has run
+                    onResult(true, "queued")
+                    awaiting_done = true
+
+                    socket.soTimeout = QUEUED_TIMEOUT_MILLIS
+                    val finished = reader.readLine()
+
+                    if (finished == null)
+                    {
+                        println("Board closed before the queued command ran")
+                        onResult(false, "lost")
+                    }
+                    else
+                    {
+                        val done = JSONObject(finished).optString("response")
+                        onResult(done == "done", done)
+                    }
+                }
+                else
+                {
+                    onResult(status == "ack", status)
+                }
             }
         }
         catch (e: java.net.ConnectException)
@@ -89,12 +128,17 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
         }
         catch (e: java.net.SocketTimeoutException)
         {
-            if (connected)
+            if (awaiting_done)
             {
-                // Old firmware holds the connection open for the whole relay time, which
-                // outlasts this timeout on a force shutdown. Current firmware always answers.
-                println("Connected but no reply (old firmware?): ${e.message}")
-                onResult(true, "noack")
+                println("Queued command never reported back: ${e.message}")
+                onResult(false, "lost")
+            }
+            else if (connected)
+            {
+                // Connected but the board never answered. On a relayed path this is more often a
+                // slow link than a dead board, but either way the command is not confirmed.
+                println("Connected but no reply: ${e.message}")
+                onResult(false, "noreply")
             }
             else
             {
@@ -105,12 +149,12 @@ fun sendPackage(IP_address : String, port : Int, message : String, onResult: (Bo
         catch (e: java.net.SocketException)
         {
             println("Connection reset: ${e.message}")
-            onResult(false, "reset")
+            onResult(false, if (awaiting_done) "lost" else "reset")
         }
         catch (e: Exception)
         {
             println("Error during connect or transmission: ${e.message}")
-            onResult(false, "error")
+            onResult(false, if (awaiting_done) "lost" else "error")
         }
         finally
         {
@@ -126,6 +170,23 @@ class MainActivity : AppCompatActivity()
     private var current_toast: Toast? = null
     private val toast_handler = Handler(Looper.getMainLooper())
     private var toast_shown_at = 0L
+    private val button_states = mutableMapOf<Int, ButtonState>()
+
+    private fun buttonState(button : Button) = button_states[button.id] ?: ButtonState.IDLE
+
+    private fun setButtonState(button : Button, state : ButtonState)
+    {
+        button_states[button.id] = state
+        button.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, when (state)
+        {
+            ButtonState.QUEUED -> R.color.accent_queued
+            else -> R.color.accent
+        }))
+        // Half tone comes from the view's own alpha, not a translucent tint. backgroundTint is a
+        // SRC_IN colour filter, which takes the tint's RGB but keeps the drawable's alpha, so an
+        // alpha baked into the colour is thrown away and the button stays fully opaque.
+        button.alpha = if (state == ButtonState.PENDING) HALF_TONE_ALPHA else 1.0f
+    }
 
     private fun showToast(message: String)
     {
@@ -137,8 +198,8 @@ class MainActivity : AppCompatActivity()
         toast_shown_at = SystemClock.uptimeMillis()
     }
 
-    // Cuts the toast on screen short instead of replacing it outright, so a fast result does not
-    // steal "Sending command..." before it is readable and get dropped along with it
+    // Cuts the toast on screen short instead of replacing it outright, so two results landing
+    // close together do not steal each other off screen before either is readable
     private fun queueToast(message: String)
     {
         val wait = (toast_shown_at + MIN_TOAST_MILLIS) - SystemClock.uptimeMillis()
@@ -170,11 +231,11 @@ class MainActivity : AppCompatActivity()
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.INTERNET), INTERNET_PERMISSION_CODE)
 
         btn_on.setOnClickListener {
-            sendCommand("turn_pc_on", "Turning on")
+            sendCommand(btn_on, "turn_pc_on", "Turning on")
         }
 
         btn_fs.setOnClickListener {
-            sendCommand("force_shutdown_pc", "Shutting down")
+            sendCommand(btn_fs, "force_shutdown_pc", "Shutting down")
         }
 
         toggle_lan_wan.setOnClickListener {
@@ -200,20 +261,38 @@ class MainActivity : AppCompatActivity()
 
     private fun prefs() = getSharedPreferences("SharedPreferences", MODE_PRIVATE)
 
-    private fun sendCommand(request : String, success_message : String)
+    // The button itself stands in for the old "Sending command..." toast. It goes half tone while
+    // the board has yet to answer and ignores presses until it comes back, so only the result of a
+    // command is ever toasted.
+    private fun sendCommand(button : Button, request : String, success_message : String)
     {
+        if (buttonState(button) != ButtonState.IDLE)
+        {
+            return
+        }
+
         val ip_address = findViewById<EditText>(R.id.textIP).text.toString()
         val port_text = findViewById<EditText>(R.id.textPort).text.toString().trim()
         val port = if (port_text.isEmpty()) 7776 else port_text.toIntOrNull() ?: 7776
 
-        showToast("Sending command...")
+        setButtonState(button, ButtonState.PENDING)
         sendPackage(ip_address, port, request) { acked, reason ->
             runOnUiThread {
+                // A queued command is only half answered, the button darkens without a toast and
+                // waits for the board to report the command has actually run
+                if (reason == "queued")
+                {
+                    setButtonState(button, ButtonState.QUEUED)
+                    return@runOnUiThread
+                }
+
+                setButtonState(button, ButtonState.IDLE)
                 queueToast(when {
-                    reason == "noack" -> "$success_message (no ack)"
                     acked -> success_message
                     reason == "refused" -> "Connection refused"
                     reason == "timeout" -> "Timed out"
+                    reason == "noreply" -> "No answer from board"
+                    reason == "lost" -> "Lost the board while queued"
                     reason == "full" -> "Busy, command dropped"
                     else -> "Error sending command"
                 })
